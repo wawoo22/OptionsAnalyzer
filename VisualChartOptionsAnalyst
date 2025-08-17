@@ -1,0 +1,701 @@
+#!/usr/bin/env python3
+"""
+Enhanced Options Analyzer v4 - Complete All-in-One Version
+Includes analysis library, charting, data persistence, and executable menu
+"""
+
+import os
+import sys
+import json
+import pickle
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+from collections import defaultdict
+import warnings
+warnings.filterwarnings('ignore')
+
+# Try importing plotting libraries
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    PLOTTING_AVAILABLE = True
+    sns.set_style("whitegrid")
+except ImportError:
+    PLOTTING_AVAILABLE = False
+    print("⚠️  Matplotlib/Seaborn not available. Charts will be limited.")
+
+# ============================================================================
+# PART 1: DATA PERSISTENCE MODULE
+# ============================================================================
+
+class DataPersistence:
+    """Handles saving and loading of options analysis data"""
+    
+    def __init__(self, data_dir='options_data'):
+        self.data_dir = data_dir
+        self._ensure_data_dir()
+    
+    def _ensure_data_dir(self):
+        """Create data directory if it doesn't exist"""
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
+    
+    def save_analysis_results(self, symbol, data):
+        """Save analysis results for a symbol"""
+        try:
+            if 'timestamp' not in data:
+                data['timestamp'] = datetime.now().isoformat()
+            
+            filename = os.path.join(self.data_dir, f"{symbol}_analysis.json")
+            with open(filename, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+            
+            print(f"💾 Saved analysis for {symbol}")
+            return filename
+        except Exception as e:
+            print(f"❌ Error saving {symbol}: {e}")
+            return None
+    
+    def load_analysis_results(self, symbol):
+        """Load analysis results for a symbol"""
+        try:
+            filename = os.path.join(self.data_dir, f"{symbol}_analysis.json")
+            if not os.path.exists(filename):
+                return None
+            
+            with open(filename, 'r') as f:
+                data = json.load(f)
+            return data
+        except Exception as e:
+            print(f"❌ Error loading {symbol}: {e}")
+            return None
+    
+    def list_saved_analyses(self):
+        """List all symbols with saved analysis"""
+        try:
+            if not os.path.exists(self.data_dir):
+                return []
+            
+            files = [f for f in os.listdir(self.data_dir) 
+                    if f.endswith('_analysis.json')]
+            
+            symbols = [f.replace('_analysis.json', '') for f in files]
+            return sorted(symbols)
+        except Exception as e:
+            print(f"❌ Error listing analyses: {e}")
+            return []
+    
+    def export_to_csv(self, symbol=None):
+        """Export analysis data to CSV"""
+        try:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+            if symbol:
+                data = self.load_analysis_results(symbol)
+                if not data:
+                    print(f"No data found for {symbol}")
+                    return None
+                
+                df = pd.DataFrame([data.get('results', {})])
+                filename = f"{symbol}_export_{timestamp}.csv"
+            else:
+                symbols = self.list_saved_analyses()
+                if not symbols:
+                    print("No data to export")
+                    return None
+                
+                all_data = []
+                for sym in symbols:
+                    data = self.load_analysis_results(sym)
+                    if data and 'results' in data:
+                        row = data.get('results', {}).copy()
+                        row['symbol'] = sym
+                        row['timestamp'] = data.get('timestamp', '')
+                        all_data.append(row)
+                
+                df = pd.DataFrame(all_data)
+                filename = f"all_symbols_export_{timestamp}.csv"
+            
+            df.to_csv(filename, index=False)
+            print(f"📊 Exported to: {filename}")
+            return filename
+        except Exception as e:
+            print(f"❌ Error exporting: {e}")
+            return None
+
+# ============================================================================
+# PART 2: ADVANCED ANALYSIS MODULE WITH PREMIUM TRACKING
+# ============================================================================
+
+class AdvancedOptionsAnalyzer:
+    """Advanced analytics for options sentiment analysis with premium tracking"""
+    
+    def __init__(self):
+        self.sentiment_history = defaultdict(list)
+        self.alerts = defaultdict(list)
+        self.charts_dir = 'options_charts'
+        self._ensure_charts_dir()
+    
+    def _ensure_charts_dir(self):
+        """Create charts directory if it doesn't exist"""
+        if not os.path.exists(self.charts_dir):
+            os.makedirs(self.charts_dir)
+    
+    def add_sentiment_entry(self, symbol, data):
+        """Add sentiment data point for historical tracking including premium data"""
+        try:
+            entry = {
+                'timestamp': data.get('timestamp', datetime.now().isoformat()),
+                'sentiment_score': data.get('results', {}).get('sentiment_score', 0),
+                'pcr_volume': data.get('results', {}).get('pcr_volume', 0),
+                'pcr_oi': data.get('results', {}).get('pcr_oi', 0),
+                'price': str(data.get('results', {}).get('current_price', '')).replace('$', '').replace(',', ''),
+                'call_volume': data.get('results', {}).get('call_volume', 0),
+                'put_volume': data.get('results', {}).get('put_volume', 0),
+                'call_oi': data.get('results', {}).get('call_oi', 0),
+                'put_oi': data.get('results', {}).get('put_oi', 0),
+                # Premium data (calculated from volume as proxy if not available)
+                'net_call_premium': data.get('results', {}).get('net_call_premium', 
+                                                                 data.get('results', {}).get('call_volume', 0) * 10),
+                'net_put_premium': data.get('results', {}).get('net_put_premium', 
+                                                               data.get('results', {}).get('put_volume', 0) * 10)
+            }
+            self.sentiment_history[symbol].append(entry)
+        except Exception as e:
+            print(f"Error adding sentiment entry: {e}")
+    
+    def calculate_advanced_metrics(self, data):
+        """Calculate advanced sentiment metrics including premium analysis"""
+        try:
+            results = data.get('results', {})
+            
+            # Extract numeric values
+            call_vol = results.get('call_volume', 0)
+            put_vol = results.get('put_volume', 0)
+            call_oi = results.get('call_oi', 0)
+            put_oi = results.get('put_oi', 0)
+            pcr_vol = results.get('pcr_volume', 1)
+            
+            # Calculate advanced metrics
+            metrics = {}
+            
+            # Volume momentum
+            total_volume = call_vol + put_vol
+            if total_volume > 0:
+                metrics['volume_momentum'] = (call_vol - put_vol) / total_volume
+                metrics['call_bias_pct'] = round((call_vol / total_volume) * 100, 1)
+            else:
+                metrics['volume_momentum'] = 0
+                metrics['call_bias_pct'] = 50.0
+            
+            # Flow bias score
+            if pcr_vol > 0:
+                metrics['flow_bias_score'] = (1 - pcr_vol) / (1 + pcr_vol)
+            else:
+                metrics['flow_bias_score'] = 0
+            
+            # Positioning strength
+            total_oi = call_oi + put_oi
+            if total_oi > 0:
+                metrics['positioning_strength'] = abs(call_oi - put_oi) / total_oi
+            else:
+                metrics['positioning_strength'] = 0
+            
+            # Premium metrics
+            call_premium = results.get('net_call_premium', call_vol * 10)
+            put_premium = results.get('net_put_premium', put_vol * 10)
+            
+            metrics['net_premium_flow'] = call_premium - put_premium
+            if call_premium + put_premium > 0:
+                metrics['premium_ratio'] = call_premium / (call_premium + put_premium)
+            else:
+                metrics['premium_ratio'] = 0.5
+            
+            # Composite sentiment score
+            sentiment_components = []
+            
+            if pcr_vol < 0.5:
+                sentiment_components.append(5)
+            elif pcr_vol < 0.8:
+                sentiment_components.append(4)
+            elif pcr_vol < 1.2:
+                sentiment_components.append(3)
+            elif pcr_vol < 1.5:
+                sentiment_components.append(2)
+            else:
+                sentiment_components.append(1)
+            
+            if metrics['volume_momentum'] > 0.3:
+                sentiment_components.append(5)
+            elif metrics['volume_momentum'] > 0.1:
+                sentiment_components.append(4)
+            elif metrics['volume_momentum'] > -0.1:
+                sentiment_components.append(3)
+            elif metrics['volume_momentum'] > -0.3:
+                sentiment_components.append(2)
+            else:
+                sentiment_components.append(1)
+            
+            metrics['composite_sentiment'] = round(np.mean(sentiment_components), 2)
+            
+            return metrics
+            
+        except Exception as e:
+            print(f"Error calculating advanced metrics: {e}")
+            return {}
+    
+    def detect_sentiment_alerts(self, symbol):
+        """Detect significant sentiment changes or extremes"""
+        alerts = []
+        
+        if symbol not in self.sentiment_history:
+            return alerts
+        
+        history = self.sentiment_history[symbol]
+        if len(history) < 1:
+            return alerts
+        
+        latest = history[-1]
+        
+        # Check for extreme P/C ratios
+        pcr_vol = latest.get('pcr_volume', 1)
+        if pcr_vol < 0.3:
+            alerts.append({
+                'type': 'extreme_bullish',
+                'message': f"🔥 Extreme bullish: P/C = {pcr_vol:.2f}",
+                'severity': 'high'
+            })
+        elif pcr_vol > 2.0:
+            alerts.append({
+                'type': 'extreme_bearish',
+                'message': f"🔥 Extreme bearish: P/C = {pcr_vol:.2f}",
+                'severity': 'high'
+            })
+        
+        # Check for premium imbalances
+        net_call = latest.get('net_call_premium', 0)
+        net_put = latest.get('net_put_premium', 0)
+        
+        if net_call > net_put * 2 and net_call > 10000:
+            alerts.append({
+                'type': 'call_surge',
+                'message': f"📈 Heavy call flow: ${net_call:,.0f}",
+                'severity': 'medium'
+            })
+        elif net_put > net_call * 2 and net_put > 10000:
+            alerts.append({
+                'type': 'put_surge',
+                'message': f"📉 Heavy put flow: ${net_put:,.0f}",
+                'severity': 'medium'
+            })
+        
+        return alerts
+    
+    def plot_sentiment_history(self, symbol, days=30):
+        """Create sentiment history chart with NET PREMIUMS"""
+        if not PLOTTING_AVAILABLE:
+            print("❌ Plotting not available. Install matplotlib and seaborn.")
+            return None
+        
+        try:
+            if symbol not in self.sentiment_history:
+                print(f"No history data for {symbol}")
+                return None
+            
+            history = self.sentiment_history[symbol]
+            if not history:
+                print(f"Empty history for {symbol}")
+                return None
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(history)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
+            # Create figure with subplots
+            fig, axes = plt.subplots(3, 1, figsize=(14, 11))
+            fig.suptitle(f'{symbol} Options Analysis - Premium Flow Analysis', 
+                        fontsize=16, fontweight='bold')
+            
+            # Plot 1: Sentiment Score
+            ax1 = axes[0]
+            ax1.plot(df['timestamp'], df['sentiment_score'], 'b-', linewidth=2, label='Sentiment Score')
+            ax1.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+            ax1.fill_between(df['timestamp'], 0, df['sentiment_score'], 
+                            where=(df['sentiment_score'] > 0), color='green', alpha=0.3, label='Bullish')
+            ax1.fill_between(df['timestamp'], 0, df['sentiment_score'], 
+                            where=(df['sentiment_score'] < 0), color='red', alpha=0.3, label='Bearish')
+            ax1.set_ylabel('Sentiment Score', fontsize=12)
+            ax1.legend(loc='upper left')
+            ax1.grid(True, alpha=0.3)
+            ax1.set_title('Market Sentiment', fontsize=12, fontweight='bold')
+            
+            # Plot 2: NET PREMIUMS
+            ax2 = axes[1]
+            
+            # Calculate net premiums
+            net_call_premiums = df['net_call_premium'] / 1000  # Convert to thousands
+            net_put_premiums = df['net_put_premium'] / 1000
+            
+            # Plot premium bars
+            ax2.bar(df['timestamp'], net_call_premiums, 
+                   color='green', alpha=0.7, label='Net Call Premium ($K)')
+            ax2.bar(df['timestamp'], -net_put_premiums, 
+                   color='red', alpha=0.7, label='Net Put Premium ($K)')
+            
+            # Add net flow line
+            net_flow = net_call_premiums - net_put_premiums
+            ax2.plot(df['timestamp'], net_flow, 'b-', linewidth=2, 
+                    label='Net Premium Flow', marker='o', markersize=4)
+            
+            ax2.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+            ax2.set_ylabel('Net Premium ($K)', fontsize=12)
+            ax2.legend(loc='upper left')
+            ax2.grid(True, alpha=0.3)
+            ax2.set_title('Options Premium Flow Analysis', fontsize=12, fontweight='bold')
+            
+            # Plot 3: Volume
+            ax3 = axes[2]
+            ax3.bar(df['timestamp'], df['call_volume'], color='green', alpha=0.6, label='Call Volume')
+            ax3.bar(df['timestamp'], df['put_volume'], bottom=df['call_volume'],
+                   color='red', alpha=0.6, label='Put Volume')
+            ax3.set_ylabel('Volume', fontsize=12)
+            ax3.set_xlabel('Date', fontsize=12)
+            ax3.legend(loc='upper left')
+            ax3.grid(True, alpha=0.3)
+            ax3.set_title('Volume Distribution', fontsize=12, fontweight='bold')
+            
+            # Format x-axis
+            for ax in axes:
+                ax.tick_params(axis='x', rotation=45)
+            
+            plt.tight_layout()
+            
+            # Save chart
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = os.path.join(self.charts_dir, f'{symbol}_premium_flow_{timestamp}.png')
+            plt.savefig(filename, dpi=100, bbox_inches='tight')
+            plt.show()
+            
+            print(f"📊 Chart saved to: {filename}")
+            return filename
+            
+        except Exception as e:
+            print(f"Error creating chart: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def generate_report(self, symbol):
+        """Generate comprehensive analysis report"""
+        if symbol not in self.sentiment_history:
+            return f"No data available for {symbol}"
+        
+        history = self.sentiment_history[symbol]
+        if not history:
+            return f"Empty history for {symbol}"
+        
+        latest = history[-1]
+        
+        report = f"""
+╔════════════════════════════════════════════════════════════╗
+║                 ANALYSIS REPORT - {symbol:^8}              ║
+╚════════════════════════════════════════════════════════════╝
+
+📅 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+📊 Data Points: {len(history)}
+
+CURRENT STATUS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 Sentiment Score: {latest.get('sentiment_score', 0)}
+📊 P/C Volume: {latest.get('pcr_volume', 0):.3f}
+📈 Call Volume: {latest.get('call_volume', 0):,}
+📉 Put Volume: {latest.get('put_volume', 0):,}
+
+💰 PREMIUM FLOW:
+  • Net Call Premium: ${latest.get('net_call_premium', 0):,.0f}
+  • Net Put Premium: ${latest.get('net_put_premium', 0):,.0f}
+  • Net Flow: ${(latest.get('net_call_premium', 0) - latest.get('net_put_premium', 0)):,.0f}
+
+ALERTS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+        alerts = self.detect_sentiment_alerts(symbol)
+        if alerts:
+            for alert in alerts:
+                report += f"  {alert['message']}\n"
+        else:
+            report += "  ✅ No active alerts\n"
+        
+        return report
+
+# ============================================================================
+# PART 3: MAIN APPLICATION - VISUAL OPTIONS ANALYZER
+# ============================================================================
+
+class VisualOptionsAnalyzer:
+    """Main application class combining all functionality"""
+    
+    def __init__(self):
+        print("\n🚀 Enhanced Options Analyzer v4.0 - Complete Edition")
+        print("=" * 70)
+        
+        self.data_manager = DataPersistence()
+        self.analyzer = AdvancedOptionsAnalyzer()
+        
+        # Load existing data into analyzer
+        self._load_historical_data()
+    
+    def _load_historical_data(self):
+        """Load all saved data into the analyzer for charting"""
+        symbols = self.data_manager.list_saved_analyses()
+        loaded = 0
+        for symbol in symbols:
+            data = self.data_manager.load_analysis_results(symbol)
+            if data:
+                self.analyzer.add_sentiment_entry(symbol, data)
+                loaded += 1
+        
+        if loaded > 0:
+            print(f"📂 Loaded {loaded} symbols into analyzer")
+    
+    def view_symbol_details(self):
+        """View detailed data for a symbol"""
+        symbols = self.data_manager.list_saved_analyses()
+        
+        if not symbols:
+            print("\n❌ No saved data found")
+            return
+        
+        print(f"\n📊 Available symbols: {', '.join(symbols)}")
+        symbol = input("Enter symbol to view: ").strip().upper()
+        
+        if symbol not in symbols:
+            print(f"❌ Symbol {symbol} not found")
+            return
+        
+        data = self.data_manager.load_analysis_results(symbol)
+        if not data:
+            print(f"❌ Could not load data for {symbol}")
+            return
+        
+        results = data.get('results', {})
+        
+        print(f"\n{'='*60}")
+        print(f"📊 {symbol} DETAILED ANALYSIS")
+        print(f"{'='*60}")
+        
+        print("\n📈 PRICE DATA:")
+        print(f"  Current Price: {results.get('current_price', 'N/A')}")
+        print(f"  Price Change: {results.get('price_change', 'N/A')}")
+        
+        print("\n🎯 SENTIMENT:")
+        print(f"  Sentiment: {results.get('sentiment', 'N/A')}")
+        print(f"  Score: {results.get('sentiment_score', 'N/A')}")
+        
+        print("\n📊 OPTIONS FLOW:")
+        print(f"  P/C Volume: {results.get('pcr_volume', 'N/A')}")
+        print(f"  P/C OI: {results.get('pcr_oi', 'N/A')}")
+        print(f"  Call Volume: {results.get('call_volume', 0):,}")
+        print(f"  Put Volume: {results.get('put_volume', 0):,}")
+        print(f"  Call OI: {results.get('call_oi', 0):,}")
+        print(f"  Put OI: {results.get('put_oi', 0):,}")
+        
+        print("\n📉 VOLATILITY:")
+        print(f"  Implied Vol: {results.get('implied_vol_avg', 'N/A')}")
+        print(f"  Realized Vol: {results.get('realized_vol_10d', 'N/A')}")
+        print(f"  IV/RV Ratio: {results.get('iv_rv_ratio', 'N/A')}")
+        
+        print("\n🏢 COMPANY:")
+        print(f"  Market Cap: {results.get('market_cap', 'N/A')}")
+        print(f"  Sector: {results.get('sector', 'N/A')}")
+        print(f"  Beta: {results.get('beta', 'N/A')}")
+        
+        # Calculate and show advanced metrics
+        advanced = self.analyzer.calculate_advanced_metrics(data)
+        if advanced:
+            print("\n🔬 ADVANCED METRICS:")
+            print(f"  Composite Sentiment: {advanced.get('composite_sentiment', 'N/A')}/5.0")
+            print(f"  Volume Momentum: {advanced.get('volume_momentum', 0):.3f}")
+            print(f"  Flow Bias Score: {advanced.get('flow_bias_score', 0):.3f}")
+            print(f"  Call Bias %: {advanced.get('call_bias_pct', 50):.1f}%")
+        
+        # Show alerts
+        alerts = self.analyzer.detect_sentiment_alerts(symbol)
+        if alerts:
+            print(f"\n🚨 ALERTS ({len(alerts)}):")
+            for alert in alerts:
+                print(f"  {alert['message']}")
+        
+        print(f"\n⏰ Last Updated: {data.get('timestamp', 'N/A')[:19]}")
+    
+    def show_summary_table(self):
+        """Show summary table of all symbols"""
+        symbols = self.data_manager.list_saved_analyses()
+        
+        if not symbols:
+            print("\n❌ No saved data found")
+            return
+        
+        print(f"\n{'='*85}")
+        print(f"{'Symbol':<8} {'Price':<12} {'Sentiment':<15} {'P/C Vol':<10} {'Volume':<12} {'Alerts':<10}")
+        print(f"{'='*85}")
+        
+        for symbol in symbols:
+            data = self.data_manager.load_analysis_results(symbol)
+            if data and 'results' in data:
+                r = data['results']
+                total_vol = r.get('call_volume', 0) + r.get('put_volume', 0)
+                alerts = self.analyzer.detect_sentiment_alerts(symbol)
+                alert_str = f"{len(alerts)} ⚠️" if alerts else "✅"
+                
+                print(f"{symbol:<8} {str(r.get('current_price', 'N/A')):<12} "
+                      f"{r.get('sentiment', 'N/A'):<15} {r.get('pcr_volume', 0):<10.3f} "
+                      f"{total_vol:<12,} {alert_str:<10}")
+        
+        print(f"{'='*85}")
+    
+    def generate_charts(self):
+        """Generate charts for a symbol"""
+        symbols = self.data_manager.list_saved_analyses()
+        
+        if not symbols:
+            print("\n❌ No data available for charts")
+            return
+        
+        print(f"\n📊 Available symbols: {', '.join(symbols)}")
+        symbol = input("Enter symbol for chart: ").strip().upper()
+        
+        if symbol not in symbols:
+            print(f"❌ No data for {symbol}")
+            return
+        
+        print(f"\n📈 Generating premium flow chart for {symbol}...")
+        self.analyzer.plot_sentiment_history(symbol)
+    
+    def show_alerts_dashboard(self):
+        """Show alerts for all symbols"""
+        symbols = self.data_manager.list_saved_analyses()
+        
+        if not symbols:
+            print("\n❌ No saved data")
+            return
+        
+        print("\n" + "="*60)
+        print("🚨 ALERTS DASHBOARD")
+        print("="*60)
+        
+        total_alerts = 0
+        for symbol in symbols:
+            alerts = self.analyzer.detect_sentiment_alerts(symbol)
+            if alerts:
+                print(f"\n📊 {symbol}:")
+                for alert in alerts:
+                    print(f"  {alert['message']}")
+                total_alerts += len(alerts)
+        
+        if total_alerts == 0:
+            print("\n✅ No active alerts across all symbols")
+        else:
+            print(f"\n📊 Total: {total_alerts} active alerts")
+    
+    def run_menu(self):
+        """Main menu loop"""
+        while True:
+            try:
+                print("\n" + "="*70)
+                print("📊 VISUAL OPTIONS ANALYZER v4.0 - MAIN MENU")
+                print("="*70)
+                
+                symbols = self.data_manager.list_saved_analyses()
+                if symbols:
+                    print(f"📋 Loaded symbols: {', '.join(symbols)}")
+                else:
+                    print("❌ No saved data found")
+                
+                print("\n1. 📖 View Symbol Details")
+                print("2. 📊 Summary Table")
+                print("3. 📈 Generate Premium Flow Chart")
+                print("4. 🚨 Alerts Dashboard")
+                print("5. 📑 Generate Report")
+                print("6. 💾 Export to CSV")
+                print("7. 🔄 Refresh Data")
+                print("8. ❌ Exit")
+                
+                choice = input("\nSelect (1-8): ").strip()
+                
+                if choice == '1':
+                    self.view_symbol_details()
+                
+                elif choice == '2':
+                    self.show_summary_table()
+                
+                elif choice == '3':
+                    self.generate_charts()
+                
+                elif choice == '4':
+                    self.show_alerts_dashboard()
+                
+                elif choice == '5':
+                    if symbols:
+                        symbol = input("Enter symbol for report: ").strip().upper()
+                        if symbol in symbols:
+                            print(self.analyzer.generate_report(symbol))
+                        else:
+                            print(f"❌ {symbol} not found")
+                
+                elif choice == '6':
+                    print("\n1. Export single symbol")
+                    print("2. Export all symbols")
+                    export_choice = input("Select (1-2): ").strip()
+                    
+                    if export_choice == '1':
+                        symbol = input("Enter symbol: ").strip().upper()
+                        self.data_manager.export_to_csv(symbol)
+                    elif export_choice == '2':
+                        self.data_manager.export_to_csv()
+                
+                elif choice == '7':
+                    print("\n🔄 Refreshing data...")
+                    self._load_historical_data()
+                    print("✅ Data refreshed")
+                
+                elif choice == '8':
+                    print("\n👋 Thank you for using Visual Options Analyzer!")
+                    print("💾 All data saved successfully")
+                    break
+                
+                else:
+                    print("❌ Invalid choice")
+                
+                if choice not in ['8']:
+                    input("\nPress Enter to continue...")
+                    
+            except KeyboardInterrupt:
+                print("\n\n👋 Goodbye!")
+                break
+            except Exception as e:
+                print(f"\n❌ Error: {e}")
+                import traceback
+                traceback.print_exc()
+                input("\nPress Enter to continue...")
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
+def main():
+    """Main entry point"""
+    try:
+        # Create and run the application
+        app = VisualOptionsAnalyzer()
+        app.run_menu()
+        
+    except Exception as e:
+        print(f"\n❌ Fatal Error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
